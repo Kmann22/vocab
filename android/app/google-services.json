@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "968452626195",
+    "project_id": "vocab-bfe65",
+    "storage_bucket": "vocab-bfe65.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:968452626195:android:d4a5a8089f741d0aafece6",
+        "android_client_info": {
+          "package_name": "com.example.vocab"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBz3zNm5lPyyELCRNU5OLecIUMOCuzeSzk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
