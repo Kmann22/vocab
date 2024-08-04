@@ -18,4 +18,12 @@ class Words {
       'Antonym': Antonyms
     });
   }
+
+  
+  //read: get notes from db
+  // Stream<DocumentSnapshot<Map<String, dynamic>>> getNotesStream(
+  //     String _configurationName) {
+  //   final dataStream = WordsDatabase.doc(_configurationName).snapshots();
+  //   return dataStream;
+  // }
 }
