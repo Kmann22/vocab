@@ -7,10 +7,17 @@ class Words {
       FirebaseFirestore.instance.collection('Words');
 
   //add new word
-  Future<void> addWord(String Word, String Pronunciation, String Type,
-      String Meaning, List<String> Synonyms, List<String> Antonyms) {
+  Future<void> addWord(
+      String Word,
+      String Sentence,
+      String Pronunciation,
+      String Type,
+      String Meaning,
+      List<String> Synonyms,
+      List<String> Antonyms) {
     return WordsDatabase.doc(Word.toUpperCase()).set({
       'Word': Word,
+      'Sentence': Sentence,
       'Pronunciation': Pronunciation,
       'Type': Type,
       'Meaning': Meaning,
@@ -19,7 +26,6 @@ class Words {
     });
   }
 
-  
   //read: get notes from db
   // Stream<DocumentSnapshot<Map<String, dynamic>>> getNotesStream(
   //     String _configurationName) {
