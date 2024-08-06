@@ -1,35 +1,42 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart';
 
 class Words {
-  //get collection of notes
-  final CollectionReference WordsDatabase =
+  final CollectionReference _wordsCollection =
       FirebaseFirestore.instance.collection('Words');
 
-  //add new word
   Future<void> addWord(
-      String Word,
-      String Sentence,
-      String Pronunciation,
-      String Type,
-      String Meaning,
-      List<String> Synonyms,
-      List<String> Antonyms) {
-    return WordsDatabase.doc(Word.toUpperCase()).set({
-      'Word': Word,
-      'Sentence': Sentence,
-      'Pronunciation': Pronunciation,
-      'Type': Type,
-      'Meaning': Meaning,
-      'Synonyms': Synonyms,
-      'Antonym': Antonyms
-    });
+      String word,
+      String sentence,
+      String pronunciation,
+      String type,
+      String meaning,
+      List<String> synonyms,
+      List<String> antonyms) async {
+    try {
+      await _wordsCollection.add({
+        'Word': word,
+        'Sentence': sentence,
+        'Pronunciation': pronunciation,
+        'Type': type,
+        'Meaning': meaning,
+        'Synonyms': synonyms,
+        'Antonyms': antonyms,
+      });
+    } catch (e) {
+      throw Exception('Error adding word: $e');
+    }
   }
 
-  //read: get notes from db
-  // Stream<DocumentSnapshot<Map<String, dynamic>>> getNotesStream(
-  //     String _configurationName) {
-  //   final dataStream = WordsDatabase.doc(_configurationName).snapshots();
-  //   return dataStream;
-  // }
+  Future<bool> checkIfWordExists(String word, String type) async {
+    try {
+      QuerySnapshot querySnapshot = await _wordsCollection
+          .where('Word', isEqualTo: word)
+          .where('Type', isEqualTo: type)
+          .get();
+
+      return querySnapshot.docs.isNotEmpty;
+    } catch (e) {
+      throw Exception('Error checking word existence: $e');
+    }
+  }
 }

@@ -13,7 +13,10 @@ class _OurDictionaryState extends State<OurDictionary> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Dictionary'),
+        title: Text(
+          'Our Dictionary',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         actions: [
           IconButton(
             icon: Icon(Icons.search),
@@ -22,11 +25,18 @@ class _OurDictionaryState extends State<OurDictionary> {
             },
           ),
         ],
+        backgroundColor: Colors.indigo,
+        elevation: 6.0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            bottom: Radius.circular(16),
+          ),
+        ),
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('Words')
-            .orderBy('Word') // Ensure 'word' is indexed in Firestore
+            .orderBy('Word') // Ensure 'Word' is indexed in Firestore
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -40,7 +50,10 @@ class _OurDictionaryState extends State<OurDictionary> {
             return Center(
               child: Text(
                 'No words found in the dictionary.',
-                style: TextStyle(fontSize: 24),
+                style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey),
               ),
             );
           }
@@ -74,6 +87,7 @@ class _OurDictionaryState extends State<OurDictionary> {
               final pronunciation = wordData['Pronunciation'] ?? '';
               final type = wordData['Type'] ?? '';
               final meaning = wordData['Meaning'] ?? '';
+              final sentence = wordData['Sentence'] ?? '';
               final synonyms = List<String>.from(wordData['Synonyms'] ?? []);
               final antonyms = List<String>.from(wordData['Antonyms'] ?? []);
 
@@ -99,29 +113,52 @@ class _OurDictionaryState extends State<OurDictionary> {
                         ),
                       ),
                     ),
-                  ListTile(
-                    title: Text(
-                      word,
-                      style:
-                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  Card(
+                    margin:
+                        EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+                    elevation: 4,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    trailing: Icon(Icons.arrow_forward_ios),
-                    onTap: () {
-                      // Navigate to WordDetailPage
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => WordDetailPage(
-                            word: word,
-                            pronunciation: pronunciation,
-                            type: type,
-                            meaning: meaning,
-                            synonyms: synonyms,
-                            antonyms: antonyms,
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: Colors.indigo,
+                        child: Text(
+                          word[0].toUpperCase(),
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                      );
-                    },
+                      ),
+                      title: Text(
+                        word,
+                        style: TextStyle(
+                            fontSize: 20, fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Text(
+                        type,
+                        style: TextStyle(color: Colors.grey[700]),
+                      ),
+                      trailing: Icon(Icons.arrow_forward_ios),
+                      onTap: () {
+                        // Navigate to WordDetailPage
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => WordDetailPage(
+                              word: word,
+                              pronunciation: pronunciation,
+                              type: type,
+                              meaning: meaning,
+                              sentence: sentence,
+                              synonyms: synonyms,
+                              antonyms: antonyms,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ],
               );
@@ -138,6 +175,7 @@ class WordDetailPage extends StatelessWidget {
   final String pronunciation;
   final String type;
   final String meaning;
+  final String sentence;
   final List<String> synonyms;
   final List<String> antonyms;
 
@@ -146,6 +184,7 @@ class WordDetailPage extends StatelessWidget {
     required this.pronunciation,
     required this.type,
     required this.meaning,
+    required this.sentence,
     required this.synonyms,
     required this.antonyms,
   });
@@ -154,7 +193,17 @@ class WordDetailPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(word),
+        title: Text(
+          word,
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.indigo,
+        elevation: 6.0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            bottom: Radius.circular(16),
+          ),
+        ),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -164,17 +213,32 @@ class WordDetailPage extends StatelessWidget {
             children: [
               Text(
                 word,
-                style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.indigo),
               ),
               SizedBox(height: 16),
-              Text(
-                'Pronunciation: $pronunciation',
-                style: TextStyle(fontSize: 20, fontStyle: FontStyle.italic),
+              Row(
+                children: [
+                  Icon(Icons.volume_up, color: Colors.grey[700]),
+                  SizedBox(width: 8),
+                  Text(
+                    pronunciation,
+                    style: TextStyle(fontSize: 20, fontStyle: FontStyle.italic),
+                  ),
+                ],
               ),
               SizedBox(height: 8),
-              Text(
-                'Type: $type',
-                style: TextStyle(fontSize: 20),
+              Row(
+                children: [
+                  Icon(Icons.category, color: Colors.grey[700]),
+                  SizedBox(width: 8),
+                  Text(
+                    'Type: $type',
+                    style: TextStyle(fontSize: 20),
+                  ),
+                ],
               ),
               SizedBox(height: 16),
               Text(
@@ -184,7 +248,16 @@ class WordDetailPage extends StatelessWidget {
               SizedBox(height: 8),
               Text(
                 meaning,
-                style: TextStyle(fontSize: 20),
+                style: TextStyle(fontSize: 20, height: 1.5),
+              ),
+              Text(
+                'Example:',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 8),
+              Text(
+                sentence,
+                style: TextStyle(fontSize: 20, height: 1.5),
               ),
               SizedBox(height: 16),
               if (synonyms.isNotEmpty) ...[
@@ -287,29 +360,52 @@ class WordSearch extends SearchDelegate<String> {
             final pronunciation = wordData['Pronunciation'] ?? '';
             final type = wordData['Type'] ?? '';
             final meaning = wordData['Meaning'] ?? '';
+            final sentence = wordData['Sentence'] ?? '';
             final synonyms = List<String>.from(wordData['Synonyms'] ?? []);
             final antonyms = List<String>.from(wordData['Antonyms'] ?? []);
 
-            return ListTile(
-              title: Text(
-                word,
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            return Card(
+              margin: EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => WordDetailPage(
-                      word: word,
-                      pronunciation: pronunciation,
-                      type: type,
-                      meaning: meaning,
-                      synonyms: synonyms,
-                      antonyms: antonyms,
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.indigo,
+                  child: Text(
+                    word[0].toUpperCase(),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                );
-              },
+                ),
+                title: Text(
+                  word,
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                subtitle: Text(
+                  type,
+                  style: TextStyle(color: Colors.grey[700]),
+                ),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => WordDetailPage(
+                        word: word,
+                        pronunciation: pronunciation,
+                        type: type,
+                        meaning: meaning,
+                        sentence: sentence,
+                        synonyms: synonyms,
+                        antonyms: antonyms,
+                      ),
+                    ),
+                  );
+                },
+              ),
             );
           },
         );

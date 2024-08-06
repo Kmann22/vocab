@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:vocab/services/words.dart';
@@ -20,6 +19,7 @@ class _NewWordPageState extends State<NewWordPage> {
   final TextEditingController typeController = TextEditingController();
 
   final WordApiService _wordApiService = WordApiService();
+  final Words _wordsService = Words();
   Timer? _debounce;
 
   @override
@@ -69,52 +69,157 @@ class _NewWordPageState extends State<NewWordPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Add New Word'),
+        title: const Text('Add New Word'),
+        backgroundColor: Colors.indigo,
+        elevation: 4.0,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            bottom: Radius.circular(16),
+          ),
+        ),
       ),
-      body: Padding(
-        padding: EdgeInsets.all(16.0),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            TextField(
+            buildTextField(
               controller: wordController,
-              decoration: InputDecoration(labelText: 'Word'),
+              label: 'Word',
+              hint: 'Enter a new word',
             ),
-            TextField(
+            const SizedBox(height: 10),
+            buildTextField(
               controller: sentenceController,
-              decoration: InputDecoration(labelText: 'Sentence'),
+              label: 'Sentence',
+              hint: 'Enter an example sentence',
             ),
-            TextField(
+            const SizedBox(height: 10),
+            buildTextField(
               controller: pronunciationController,
-              decoration: InputDecoration(labelText: 'Pronunciation'),
+              label: 'Pronunciation',
+              hint: 'Enter pronunciation',
             ),
-            TextField(
+            const SizedBox(height: 10),
+            buildTextField(
               controller: typeController,
-              decoration: InputDecoration(labelText: 'Type (e.g., noun, verb)'),
+              label: 'Type',
+              hint: 'Enter type (e.g., noun, verb)',
             ),
-            TextField(
+            const SizedBox(height: 10),
+            buildTextField(
               controller: meaningController,
-              decoration: InputDecoration(labelText: 'Meaning'),
+              label: 'Meaning',
+              hint: 'Enter meaning',
             ),
-            TextField(
+            const SizedBox(height: 10),
+            buildTextField(
               controller: synonymsController,
-              decoration:
-                  InputDecoration(labelText: 'Synonyms (comma-separated)'),
+              label: 'Synonyms',
+              hint: 'Enter synonyms (comma-separated)',
             ),
-            TextField(
+            const SizedBox(height: 10),
+            buildTextField(
               controller: antonymsController,
-              decoration:
-                  InputDecoration(labelText: 'Antonyms (comma-separated)'),
+              label: 'Antonyms',
+              hint: 'Enter antonyms (comma-separated)',
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: () => _addWord(context),
-              child: Text('Add Word'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.indigo,
+                padding: const EdgeInsets.symmetric(vertical: 16.0),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: () => _checkAndAddWord(context),
+              child: const Text(
+                'Add Word',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontSize: 18,
+                ),
+              ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Widget buildTextField(
+      {required TextEditingController controller,
+      required String label,
+      required String hint}) {
+    return TextField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        filled: true,
+        fillColor: Colors.grey[200],
+      ),
+    );
+  }
+
+  Future<void> _checkAndAddWord(BuildContext context) async {
+    String word = wordController.text.trim();
+    String sentence = sentenceController.text.trim();
+    String pronunciation = pronunciationController.text.trim();
+    String type = typeController.text.trim();
+    String meaning = meaningController.text.trim();
+    List<String> synonyms = synonymsController.text
+        .split(',')
+        .map((synonym) => synonym.trim())
+        .toList();
+    List<String> antonyms = antonymsController.text
+        .split(',')
+        .map((antonym) => antonym.trim())
+        .toList();
+
+    if (word.isEmpty || meaning.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Word and meaning are required')),
+      );
+      return;
+    }
+
+    // Check if the word already exists in the Firestore database
+    bool exists = await _wordsService.checkIfWordExists(word, type);
+
+    if (exists) {
+      // Show a confirmation dialog
+      bool? addDifferentMeaning = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Word already exists'),
+          content: const Text(
+              'This word already exists. Do you want to add a different meaning or type for the same word?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      );
+
+      if (addDifferentMeaning == true) {
+        // User confirmed to add a different meaning or type
+        _addWord(context);
+      }
+    } else {
+      // Word does not exist, proceed to add it
+      _addWord(context);
+    }
   }
 
   Future<void> _addWord(BuildContext context) async {
@@ -123,23 +228,22 @@ class _NewWordPageState extends State<NewWordPage> {
     String pronunciation = pronunciationController.text.trim();
     String type = typeController.text.trim();
     String meaning = meaningController.text.trim();
-    List<String> synonyms = synonymsController.text.trim().split(',');
-    List<String> antonyms = antonymsController.text.trim().split(',');
-
-    if (word.isEmpty || meaning.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Word and meaning are required')),
-      );
-      return;
-    }
+    List<String> synonyms = synonymsController.text
+        .split(',')
+        .map((synonym) => synonym.trim())
+        .toList();
+    List<String> antonyms = antonymsController.text
+        .split(',')
+        .map((antonym) => antonym.trim())
+        .toList();
 
     try {
       Words newWord = Words();
-      newWord.addWord(
+      await newWord.addWord(
           word, sentence, pronunciation, type, meaning, synonyms, antonyms);
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Word added successfully')),
+        const SnackBar(content: Text('Word added successfully')),
       );
 
       // Clear the text fields
