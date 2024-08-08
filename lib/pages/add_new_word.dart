@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:vocab/services/words.dart';
 import 'package:vocab/services/word_api_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class NewWordPage extends StatefulWidget {
   @override
@@ -22,10 +24,13 @@ class _NewWordPageState extends State<NewWordPage> {
   final Words _wordsService = Words();
   Timer? _debounce;
 
+  String? _userName;
+
   @override
   void initState() {
     super.initState();
     wordController.addListener(_onWordChanged);
+    _fetchUserName();
   }
 
   @override
@@ -48,20 +53,35 @@ class _NewWordPageState extends State<NewWordPage> {
     });
   }
 
+  Future<void> _fetchUserName() async {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      DocumentSnapshot userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      setState(() {
+        _userName = user.displayName;
+      });
+    }
+  }
+
   Future<void> _fetchWordDetails(String word) async {
     if (word.isEmpty) return;
 
     final wordDetails = await _wordApiService.fetchWordDetails(word);
 
     if (wordDetails != null) {
-      meaningController.text = wordDetails['meaning'] ?? '';
-      sentenceController.text = wordDetails['sentence'] ?? '';
-      pronunciationController.text = wordDetails['pronunciation'] ?? '';
-      typeController.text = wordDetails['type'] ?? '';
-      synonymsController.text =
-          (wordDetails['synonyms'] as List<dynamic>).join(', ');
-      antonymsController.text =
-          (wordDetails['antonyms'] as List<dynamic>).join(', ');
+      setState(() {
+        meaningController.text = wordDetails['meaning'] ?? '';
+        sentenceController.text = wordDetails['sentence'] ?? '';
+        pronunciationController.text = wordDetails['pronunciation'] ?? '';
+        typeController.text = wordDetails['type'] ?? '';
+        synonymsController.text =
+            (wordDetails['synonyms'] as List<dynamic>).join(', ');
+        antonymsController.text =
+            (wordDetails['antonyms'] as List<dynamic>).join(', ');
+      });
     }
   }
 
@@ -116,7 +136,7 @@ class _NewWordPageState extends State<NewWordPage> {
             buildTextField(
               controller: synonymsController,
               label: 'Synonyms',
-              hint: 'Enter synonyms (comma-separated)',
+              hint: 'Enter synonyms $_userName (comma-separated)',
             ),
             const SizedBox(height: 10),
             buildTextField(
@@ -137,7 +157,7 @@ class _NewWordPageState extends State<NewWordPage> {
               child: const Text(
                 'Add Word',
                 style: TextStyle(
-                  color: Colors.black,
+                  color: Colors.white,
                   fontSize: 18,
                 ),
               ),
@@ -148,10 +168,11 @@ class _NewWordPageState extends State<NewWordPage> {
     );
   }
 
-  Widget buildTextField(
-      {required TextEditingController controller,
-      required String label,
-      required String hint}) {
+  Widget buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+  }) {
     return TextField(
       controller: controller,
       decoration: InputDecoration(
@@ -239,12 +260,25 @@ class _NewWordPageState extends State<NewWordPage> {
 
     try {
       Words newWord = Words();
-      await newWord.addWord(
-          word, sentence, pronunciation, type, meaning, synonyms, antonyms);
+      await newWord.addWord(word, sentence, pronunciation, type, meaning,
+          synonyms, antonyms, _userName);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Word added successfully')),
       );
+
+      // Format the message with bold titles using asterisks for emphasis
+      String message = """
+📚 *Word:* $word
+🔊 *Pronunciation:* $pronunciation
+📖 *Meaning:* $meaning
+✍️ *Sentence:* $sentence
+📋 *Type:* $type
+🔗 *Synonyms:* ${synonyms.join(', ')}
+❌ *Antonyms:* ${antonyms.join(', ')}
+      """;
+
+      await Share.share(message);
 
       // Clear the text fields
       wordController.clear();

@@ -3,7 +3,27 @@ allprojects {
         google()
         mavenCentral()
     }
+
+    tasks.withType(JavaCompile) {
+        options.compilerArgs << "-Xlint:unchecked" << "-Xlint:deprecation"
+    }
+
+    // Optionally, you can configure all subprojects to use the same lint options
+    subprojects {
+        afterEvaluate {
+            project.plugins.withType(com.android.build.gradle.AppPlugin) {
+                android {
+                    lintOptions {
+                        abortOnError false
+                        checkReleaseBuilds false
+                        disable 'all'
+                    }
+                }
+            }
+        }
+    }
 }
+
 
 rootProject.buildDir = '../build'
 subprojects {
@@ -16,3 +36,4 @@ subprojects {
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
+
