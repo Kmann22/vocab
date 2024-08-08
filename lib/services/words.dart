@@ -4,6 +4,9 @@ class Words {
   final CollectionReference _wordsCollection =
       FirebaseFirestore.instance.collection('Words');
 
+  final CollectionReference _userCollection =
+      FirebaseFirestore.instance.collection('Users');
+
   // Method to add a word with additional user information
   Future<void> addWord(
       String word,
@@ -13,13 +16,31 @@ class Words {
       String meaning,
       List<String> synonyms,
       List<String> antonyms,
-      String? userName // Add a userName parameter
-      ) async {
+      String? userName, // Add a userName parameter
+      String? userEmail) async {
     try {
       // Generate a unique document ID based on the word and type
       String documentId = await _generateUniqueDocumentId(word, type);
 
       await _wordsCollection.doc(documentId).set({
+        'Word': word,
+        'Sentence': sentence,
+        'Pronunciation': pronunciation,
+        'Type': type,
+        'Meaning': meaning,
+        'Synonyms': synonyms,
+        'Antonyms': antonyms,
+        'AddedBy':
+            userName, // Store the user's name or 'Anonymous' if not provided
+        'Timestamp': FieldValue
+            .serverTimestamp(), // Add a timestamp for when the word is added
+      });
+
+      await _userCollection
+          .doc(userEmail)
+          .collection('AddedWords')
+          .doc(documentId)
+          .set({
         'Word': word,
         'Sentence': sentence,
         'Pronunciation': pronunciation,

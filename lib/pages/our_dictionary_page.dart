@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class OurDictionary extends StatefulWidget {
   @override
@@ -81,15 +82,14 @@ class _OurDictionaryState extends State<OurDictionary> {
             },
             itemBuilder: (context, index) {
               final wordData = words[index].data() as Map<String, dynamic>;
-
-              final word = wordData['Word'] ??
-                  'Unknown'; // Ensure field name matches Firestore
+              final word = wordData['Word'] ?? 'Unknown';
               final pronunciation = wordData['Pronunciation'] ?? '';
               final type = wordData['Type'] ?? '';
               final meaning = wordData['Meaning'] ?? '';
               final sentence = wordData['Sentence'] ?? '';
               final synonyms = List<String>.from(wordData['Synonyms'] ?? []);
               final antonyms = List<String>.from(wordData['Antonyms'] ?? []);
+              final documentId = words[index].id;
 
               // Determine if this is the first word of a new letter section
               final isFirstInSection = index == 0 ||
@@ -113,56 +113,168 @@ class _OurDictionaryState extends State<OurDictionary> {
                         ),
                       ),
                     ),
-                  Card(
-                    margin:
-                        EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-                    elevation: 4,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.indigo,
-                        child: Text(
-                          word[0].toUpperCase(),
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      title: Text(
-                        word,
-                        style: TextStyle(
-                            fontSize: 20, fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Text(
-                        type,
-                        style: TextStyle(color: Colors.grey[700]),
-                      ),
-                      trailing: Icon(Icons.arrow_forward_ios),
-                      onTap: () {
-                        // Navigate to WordDetailPage
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => WordDetailPage(
-                              word: word,
-                              pronunciation: pronunciation,
-                              type: type,
-                              meaning: meaning,
-                              sentence: sentence,
-                              synonyms: synonyms,
-                              antonyms: antonyms,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+                  WordTile(
+                    word: word,
+                    pronunciation: pronunciation,
+                    type: type,
+                    meaning: meaning,
+                    sentence: sentence,
+                    synonyms: synonyms,
+                    antonyms: antonyms,
+                    documentId: documentId,
                   ),
                 ],
               );
             },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class WordTile extends StatefulWidget {
+  final String word;
+  final String pronunciation;
+  final String type;
+  final String meaning;
+  final String sentence;
+  final List<String> synonyms;
+  final List<String> antonyms;
+  final String documentId;
+
+  WordTile({
+    required this.word,
+    required this.pronunciation,
+    required this.type,
+    required this.meaning,
+    required this.sentence,
+    required this.synonyms,
+    required this.antonyms,
+    required this.documentId,
+  });
+
+  @override
+  _WordTileState createState() => _WordTileState();
+}
+
+class _WordTileState extends State<WordTile> {
+  bool isFavorite = false;
+
+  @override
+  void initState() {
+    super.initState();
+    checkFavoriteStatus();
+  }
+
+  Future<void> checkFavoriteStatus() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return; // User is not logged in
+
+    final userEmail = user.email;
+    final userCollection =
+        FirebaseFirestore.instance.collection('Users').doc(userEmail);
+
+    final favoriteRef =
+        userCollection.collection('FavouriteWords').doc(widget.documentId);
+
+    final snapshot = await favoriteRef.get();
+
+    setState(() {
+      isFavorite = snapshot.exists;
+    });
+  }
+
+  Future<void> toggleFavorite() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return; // User is not logged in
+
+    final userEmail = user.email;
+    final userCollection =
+        FirebaseFirestore.instance.collection('Users').doc(userEmail);
+
+    final favoriteRef =
+        userCollection.collection('FavouriteWords').doc(widget.documentId);
+
+    final snapshot = await favoriteRef.get();
+
+    if (snapshot.exists) {
+      // If already favorited, remove from favorites
+      await favoriteRef.delete();
+      setState(() {
+        isFavorite = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${widget.word} removed from favorites.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } else {
+      // Add to favorites
+      await favoriteRef.set({
+        'Word': widget.word,
+        'Sentence': widget.sentence,
+        'Pronunciation': widget.pronunciation,
+        'Type': widget.type,
+        'Meaning': widget.meaning,
+        'Synonyms': widget.synonyms,
+        'Antonyms': widget.antonyms,
+        'AddedBy': userEmail ?? 'Anonymous',
+        'Timestamp': FieldValue.serverTimestamp(),
+      });
+      setState(() {
+        isFavorite = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${widget.word} added to favorites.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ListTile(
+        leading: IconButton(
+          icon: Icon(
+            isFavorite ? Icons.favorite : Icons.favorite_border,
+            color: Colors.redAccent,
+          ),
+          onPressed: toggleFavorite,
+        ),
+        title: Text(
+          widget.word,
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        subtitle: Text(
+          widget.type,
+          style: TextStyle(color: Colors.grey[700]),
+        ),
+        trailing: Icon(Icons.arrow_forward_ios),
+        onTap: () {
+          // Navigate to WordDetailPage
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => WordDetailPage(
+                word: widget.word,
+                pronunciation: widget.pronunciation,
+                type: widget.type,
+                meaning: widget.meaning,
+                sentence: widget.sentence,
+                synonyms: widget.synonyms,
+                antonyms: widget.antonyms,
+              ),
+            ),
           );
         },
       ),
@@ -205,85 +317,93 @@ class WordDetailPage extends StatelessWidget {
           ),
         ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                word,
-                style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.indigo),
-              ),
-              SizedBox(height: 16),
-              Row(
-                children: [
-                  Icon(Icons.volume_up, color: Colors.grey[700]),
-                  SizedBox(width: 8),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.all(16.0),
+        child: Card(
+          elevation: 4.0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  word,
+                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  pronunciation,
+                  style: TextStyle(fontSize: 20, color: Colors.grey[600]),
+                ),
+                SizedBox(height: 16),
+                Text(
+                  'Type: $type',
+                  style: TextStyle(
+                      fontSize: 24,
+                      color: Colors.indigo,
+                      fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 16),
+                Text(
+                  'Meaning:',
+                  style: TextStyle(
+                      fontSize: 24,
+                      color: Colors.indigo,
+                      fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  meaning,
+                  style: TextStyle(fontSize: 20, height: 1.5),
+                ),
+                SizedBox(height: 16),
+                Text(
+                  'Example:',
+                  style: TextStyle(
+                      fontSize: 24,
+                      color: Colors.indigo,
+                      fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  sentence,
+                  style: TextStyle(fontSize: 20, height: 1.5),
+                ),
+                SizedBox(height: 16),
+                if (synonyms.isNotEmpty) ...[
                   Text(
-                    pronunciation,
-                    style: TextStyle(fontSize: 20, fontStyle: FontStyle.italic),
+                    'Synonyms:',
+                    style: TextStyle(
+                        fontSize: 24,
+                        color: Colors.indigo,
+                        fontWeight: FontWeight.bold),
                   ),
-                ],
-              ),
-              SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.category, color: Colors.grey[700]),
-                  SizedBox(width: 8),
+                  SizedBox(height: 8),
                   Text(
-                    'Type: $type',
+                    synonyms.join(', '),
+                    style: TextStyle(fontSize: 20),
+                  ),
+                  SizedBox(height: 16),
+                ],
+                if (antonyms.isNotEmpty) ...[
+                  Text(
+                    'Antonyms:',
+                    style: TextStyle(
+                        fontSize: 24,
+                        color: Colors.indigo,
+                        fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    antonyms.join(', '),
                     style: TextStyle(fontSize: 20),
                   ),
                 ],
-              ),
-              SizedBox(height: 16),
-              Text(
-                'Meaning:',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 8),
-              Text(
-                meaning,
-                style: TextStyle(fontSize: 20, height: 1.5),
-              ),
-              Text(
-                'Example:',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 8),
-              Text(
-                sentence,
-                style: TextStyle(fontSize: 20, height: 1.5),
-              ),
-              SizedBox(height: 16),
-              if (synonyms.isNotEmpty) ...[
-                Text(
-                  'Synonyms:',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  synonyms.join(', '),
-                  style: TextStyle(fontSize: 20),
-                ),
-                SizedBox(height: 16),
               ],
-              if (antonyms.isNotEmpty) ...[
-                Text(
-                  'Antonyms:',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  antonyms.join(', '),
-                  style: TextStyle(fontSize: 20),
-                ),
-              ],
-            ],
+            ),
           ),
         ),
       ),
@@ -355,7 +475,6 @@ class WordSearch extends SearchDelegate<String> {
           itemCount: words.length,
           itemBuilder: (context, index) {
             final wordData = words[index].data() as Map<String, dynamic>;
-
             final word = wordData['Word'] ?? 'Unknown';
             final pronunciation = wordData['Pronunciation'] ?? '';
             final type = wordData['Type'] ?? '';
@@ -363,49 +482,17 @@ class WordSearch extends SearchDelegate<String> {
             final sentence = wordData['Sentence'] ?? '';
             final synonyms = List<String>.from(wordData['Synonyms'] ?? []);
             final antonyms = List<String>.from(wordData['Antonyms'] ?? []);
+            final documentId = words[index].id;
 
-            return Card(
-              margin: EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: Colors.indigo,
-                  child: Text(
-                    word[0].toUpperCase(),
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                title: Text(
-                  word,
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                subtitle: Text(
-                  type,
-                  style: TextStyle(color: Colors.grey[700]),
-                ),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => WordDetailPage(
-                        word: word,
-                        pronunciation: pronunciation,
-                        type: type,
-                        meaning: meaning,
-                        sentence: sentence,
-                        synonyms: synonyms,
-                        antonyms: antonyms,
-                      ),
-                    ),
-                  );
-                },
-              ),
+            return WordTile(
+              word: word,
+              pronunciation: pronunciation,
+              type: type,
+              meaning: meaning,
+              sentence: sentence,
+              synonyms: synonyms,
+              antonyms: antonyms,
+              documentId: documentId,
             );
           },
         );

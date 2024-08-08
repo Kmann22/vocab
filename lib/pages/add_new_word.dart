@@ -25,6 +25,7 @@ class _NewWordPageState extends State<NewWordPage> {
   Timer? _debounce;
 
   String? _userName;
+  String? _userEmail;
 
   @override
   void initState() {
@@ -62,6 +63,7 @@ class _NewWordPageState extends State<NewWordPage> {
           .get();
       setState(() {
         _userName = user.displayName;
+        _userEmail = user.email;
       });
     }
   }
@@ -110,18 +112,6 @@ class _NewWordPageState extends State<NewWordPage> {
             ),
             const SizedBox(height: 10),
             buildTextField(
-              controller: sentenceController,
-              label: 'Sentence',
-              hint: 'Enter an example sentence',
-            ),
-            const SizedBox(height: 10),
-            buildTextField(
-              controller: pronunciationController,
-              label: 'Pronunciation',
-              hint: 'Enter pronunciation',
-            ),
-            const SizedBox(height: 10),
-            buildTextField(
               controller: typeController,
               label: 'Type',
               hint: 'Enter type (e.g., noun, verb)',
@@ -131,6 +121,18 @@ class _NewWordPageState extends State<NewWordPage> {
               controller: meaningController,
               label: 'Meaning',
               hint: 'Enter meaning',
+            ),
+            const SizedBox(height: 10),
+            buildTextField(
+              controller: sentenceController,
+              label: 'Sentence',
+              hint: 'Enter an example sentence',
+            ),
+            const SizedBox(height: 10),
+            buildTextField(
+              controller: pronunciationController,
+              label: 'Pronunciation',
+              hint: 'Enter pronunciation',
             ),
             const SizedBox(height: 10),
             buildTextField(
@@ -261,7 +263,7 @@ class _NewWordPageState extends State<NewWordPage> {
     try {
       Words newWord = Words();
       await newWord.addWord(word, sentence, pronunciation, type, meaning,
-          synonyms, antonyms, _userName);
+          synonyms, antonyms, _userName, _userEmail);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Word added successfully')),

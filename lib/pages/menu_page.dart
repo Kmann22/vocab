@@ -193,16 +193,28 @@ class MenuPage extends StatelessWidget {
     );
   }
 
-  Future<int> _getUserWordCount(String userId) async {
+  Future<int> _getUserWordCount(String uid) async {
     try {
+      // Get the current user
+      User? user = FirebaseAuth.instance.currentUser;
+
+      // Ensure the user is logged in
+      if (user == null) {
+        print('User is not logged in');
+        return 0;
+      }
+
       // Query Firestore for words added by the user
       QuerySnapshot snapshot = await FirebaseFirestore.instance
-          .collection('Words')
-          .where('UserId', isEqualTo: userId)
+          .collection('Users')
+          .doc(user.email)
+          .collection('AddedWords')
           .get();
 
+      // Return the count of documents (i.e., the number of words added)
       return snapshot.docs.length;
     } catch (e) {
+      // Log the error and return 0
       print('Error fetching user word count: $e');
       return 0;
     }
