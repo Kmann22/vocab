@@ -1,0 +1,42 @@
+rules_version = '2';
+
+// Security rules for WordWiser.
+// Deploy with:  firebase deploy --only firestore:rules
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Shared dictionary: any signed-in user can read and add words,
+    // but nobody can edit or delete someone else's entries from the app.
+    match /Words/{wordId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.Word is string
+        && request.resource.data.Word.size() > 0
+        && request.resource.data.Word.size() <= 60
+        && request.resource.data.Meaning is string
+        && request.resource.data.Meaning.size() <= 2000;
+      allow update, delete: if false;
+    }
+
+    // Word of the day: one document per date (a word from the dictionary plus
+    // an AI-written message), written once by the first signed-in user of the
+    // day, then read by everyone.
+    match /DailyWord/{day} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.word is string
+        && request.resource.data.word.size() <= 30
+        && request.resource.data.meaning is string
+        && request.resource.data.meaning.size() <= 200
+        && request.resource.data.message is string
+        && request.resource.data.message.size() <= 400;
+      allow update, delete: if false;
+    }
+
+    // Each user's own lists (added words, favourites) are private to them.
+    match /Users/{email}/{document=**} {
+      allow read, write: if request.auth != null
+        && request.auth.token.email == email;
+    }
+  }
+}

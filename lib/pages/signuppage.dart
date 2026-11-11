@@ -1,156 +1,148 @@
 import 'package:flutter/material.dart';
-import 'package:vocab/pages/menu_page.dart';
-import 'package:vocab/services/authentication.dart';
 
-class SignupPage extends StatelessWidget {
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController =
-      TextEditingController();
+import '../services/authentication.dart';
+import '../widgets/common.dart';
+import 'auth_layout.dart';
+import 'loginpage.dart';
+
+class SignupPage extends StatefulWidget {
+  const SignupPage({super.key});
+
+  @override
+  State<SignupPage> createState() => _SignupPageState();
+}
+
+class _SignupPageState extends State<SignupPage> {
+  final _formKey = GlobalKey<FormState>();
+  final _name = TextEditingController();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  final _confirm = TextEditingController();
+  bool _loading = false;
+  bool _obscure = true;
+  String? _error;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _email.dispose();
+    _password.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    FocusScope.of(context).unfocus();
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await AuthService.signUp(
+        name: _name.text.trim(),
+        email: _email.text.trim(),
+        password: _password.text,
+      );
+      if (!mounted) return;
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      showMessage(context, 'Welcome to WordWiser, ${_name.text.trim()}!');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = AuthService.friendlyError(e);
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: Text('Sign Up'),
-        centerTitle: true,
-        backgroundColor: Colors.indigo,
-      ),
-      body: Padding(
-        padding: EdgeInsets.all(16.0),
-        child: SingleChildScrollView(
+    return AuthLayout(
+      title: 'CREATE YOUR ACCOUNT',
+      subtitle: 'It takes less than a minute.',
+      form: Form(
+        key: _formKey,
+        child: AutofillGroup(
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Image.asset(
-              //   'assets/images/wordwiser.png', // Add your logo here
-              //   height: 100,
-              // ),
-              // SizedBox(height: 20),
-              TextField(
-                controller: _nameController,
-                decoration: InputDecoration(
-                  labelText: 'Name',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+              TextFormField(
+                controller: _name,
+                textCapitalization: TextCapitalization.words,
+                textInputAction: TextInputAction.next,
+                autofillHints: const [AutofillHints.name],
+                decoration: const InputDecoration(
+                  labelText: 'Your name',
+                  prefixIcon: Icon(Icons.person_outline_rounded),
                 ),
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter your name' : null,
               ),
-              SizedBox(height: 16),
-              TextField(
-                controller: _emailController,
-                decoration: InputDecoration(
-                  labelText: 'Email',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: _email,
                 keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+                autofillHints: const [AutofillHints.email],
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  prefixIcon: Icon(Icons.mail_outline_rounded),
+                ),
+                validator: validateEmail,
               ),
-              SizedBox(height: 16),
-              TextField(
-                controller: _passwordController,
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: _password,
+                obscureText: _obscure,
+                textInputAction: TextInputAction.next,
+                autofillHints: const [AutofillHints.newPassword],
                 decoration: InputDecoration(
                   labelText: 'Password',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
+                  helperText: 'At least 6 characters',
+                  prefixIcon: const Icon(Icons.lock_outline_rounded),
+                  suffixIcon: IconButton(
+                    tooltip: _obscure ? 'Show password' : 'Hide password',
+                    icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                    onPressed: () => setState(() => _obscure = !_obscure),
                   ),
                 ),
-                obscureText: true,
+                validator: (v) =>
+                    (v == null || v.length < 6) ? 'Use at least 6 characters' : null,
               ),
-              SizedBox(height: 16),
-              TextField(
-                controller: _confirmPasswordController,
-                decoration: InputDecoration(
-                  labelText: 'Confirm Password',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: _confirm,
+                obscureText: _obscure,
+                textInputAction: TextInputAction.done,
+                onFieldSubmitted: (_) => _submit(),
+                decoration: const InputDecoration(
+                  labelText: 'Confirm password',
+                  prefixIcon: Icon(Icons.lock_outline_rounded),
                 ),
-                obscureText: true,
+                validator: (v) => v != _password.text ? 'Passwords don’t match' : null,
               ),
-              SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () => _signUp(context),
-                style: ElevatedButton.styleFrom(
-                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 32),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: Text(
-                  'Sign Up',
-                  style: TextStyle(fontSize: 18),
-                ),
-              ),
-              SizedBox(height: 20),
-              TextButton(
-                onPressed: () {
-                  // Navigate to the login page
-                  Navigator.pop(context);
-                },
-                child: Text(
-                  'Already have an account? Login',
-                  style: TextStyle(color: Colors.indigo),
-                ),
+              const SizedBox(height: 24),
+              if (_error != null) FormErrorBox(_error!),
+              ArrowButton(
+                label: 'CREATE ACCOUNT',
+                expand: true,
+                loading: _loading,
+                onPressed: _submit,
               ),
             ],
           ),
         ),
       ),
-    );
-  }
-
-  Future<void> _signUp(BuildContext context) async {
-    final String name = _nameController.text.trim();
-    final String email = _emailController.text.trim();
-    final String password = _passwordController.text.trim();
-    final String confirmPassword = _confirmPasswordController.text.trim();
-
-    if (password != confirmPassword) {
-      _showErrorDialog(context, 'Passwords do not match');
-      return;
-    }
-
-    try {
-      await AuthService.signUp(email, password, name);
-      _showSuccessDialog(context, 'User registered successfully!');
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => MenuPage()),
-      );
-    } catch (e) {
-      _showErrorDialog(context, e.toString());
-    }
-  }
-
-  void _showErrorDialog(BuildContext context, String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Error'),
-        content: Text(message),
-        actions: [
+      footer: Wrap(
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          const Text('Already have an account?'),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showSuccessDialog(BuildContext context, String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Success'),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text('OK'),
+            onPressed: () => Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const LoginPage()),
+            ),
+            child: const Text('Log in'),
           ),
         ],
       ),

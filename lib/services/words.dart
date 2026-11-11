@@ -1,114 +1,145 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-class Words {
-  final CollectionReference _wordsCollection =
-      FirebaseFirestore.instance.collection('Words');
+import '../models/word_entry.dart';
 
-  final CollectionReference _userCollection =
-      FirebaseFirestore.instance.collection('Users');
+/// All Firestore access for words and favourites.
+///
+/// Data layout (unchanged from the original app):
+///   Words/{id}                              shared dictionary
+///   Users/{email}/AddedWords/{id}           words a user added
+///   Users/{email}/FavouriteWords/{id}       a user's favourites
+class WordRepository {
+  WordRepository({FirebaseFirestore? db, FirebaseAuth? auth})
+      : _db = db ?? FirebaseFirestore.instance,
+        _auth = auth ?? FirebaseAuth.instance;
 
-  // Method to add a word with additional user information
-  Future<void> addWord(
-      String word,
-      String sentence,
-      String pronunciation,
-      String type,
-      String meaning,
-      List<String> synonyms,
-      List<String> antonyms,
-      String? userName, // Add a userName parameter
-      String? userEmail) async {
+  final FirebaseFirestore _db;
+  final FirebaseAuth _auth;
+
+  CollectionReference<Map<String, dynamic>> get _words => _db.collection('Words');
+
+  DocumentReference<Map<String, dynamic>> _userDoc(String email) =>
+      _db.collection('Users').doc(email);
+
+  String get _email {
+    final email = _auth.currentUser?.email;
+    if (email == null || email.isEmpty) {
+      throw StateError('Please log in again.');
+    }
+    return email;
+  }
+
+  /// Live list of every word, sorted A–Z ignoring case.
+  Stream<List<WordEntry>> watchAll() {
+    return _words.snapshots().map((snap) {
+      final list = snap.docs
+          .map(WordEntry.fromDoc)
+          .where((w) => w.word.isNotEmpty)
+          .toList()
+        ..sort((a, b) => a.word.toLowerCase().compareTo(b.word.toLowerCase()));
+      return list;
+    });
+  }
+
+  /// All words, served from the local cache when possible so games start
+  /// instantly. Falls back to the server the first time.
+  Future<List<WordEntry>> fetchAll() async {
+    List<WordEntry> parse(QuerySnapshot<Map<String, dynamic>> snap) =>
+        snap.docs.map(WordEntry.fromDoc).where((w) => w.word.isNotEmpty).toList();
     try {
-      // Generate a unique document ID based on the word and type
-      String documentId = await _generateUniqueDocumentId(word, type);
+      final cached = parse(await _words.get(const GetOptions(source: Source.cache)));
+      if (cached.isNotEmpty) {
+        // Refresh the cache quietly for next time.
+        _words.get(const GetOptions(source: Source.server)).ignore();
+        return cached;
+      }
+    } catch (_) {
+      // No cache yet (first launch) — use the server below.
+    }
+    return parse(await _words.get());
+  }
 
-      await _wordsCollection.doc(documentId).set({
-        'Word': word,
-        'Sentence': sentence,
-        'Pronunciation': pronunciation,
-        'Type': type,
-        'Meaning': meaning,
-        'Synonyms': synonyms,
-        'Antonyms': antonyms,
-        'AddedBy':
-            userName, // Store the user's name or 'Anonymous' if not provided
-        'Timestamp': FieldValue
-            .serverTimestamp(), // Add a timestamp for when the word is added
-      });
+  Future<bool> exists(String word, String type) async {
+    final snap = await _words
+        .where('Word', isEqualTo: word)
+        .where('Type', isEqualTo: type)
+        .limit(1)
+        .get();
+    return snap.docs.isNotEmpty;
+  }
 
-      await _userCollection
-          .doc(userEmail)
-          .collection('AddedWords')
-          .doc(documentId)
-          .set({
-        'Word': word,
-        'Sentence': sentence,
-        'Pronunciation': pronunciation,
-        'Type': type,
-        'Meaning': meaning,
-        'Synonyms': synonyms,
-        'Antonyms': antonyms,
-        'AddedBy':
-            userName, // Store the user's name or 'Anonymous' if not provided
-        'Timestamp': FieldValue
-            .serverTimestamp(), // Add a timestamp for when the word is added
-      });
-    } catch (e) {
-      throw Exception('Error adding word: $e');
+  /// Saves a word to the shared dictionary and to the user's own list.
+  Future<WordEntry> addWord(WordEntry entry) async {
+    final email = _email;
+    final entryWithAuthor = WordEntry(
+      word: entry.word,
+      type: entry.type,
+      meaning: entry.meaning,
+      sentence: entry.sentence,
+      pronunciation: entry.pronunciation,
+      synonyms: entry.synonyms,
+      antonyms: entry.antonyms,
+      addedBy: _auth.currentUser?.displayName ?? 'Anonymous',
+    );
+
+    final id = await _uniqueId(entry.word, entry.type);
+    final batch = _db.batch()
+      ..set(_words.doc(id), entryWithAuthor.toMap())
+      ..set(_userDoc(email).collection('AddedWords').doc(id), entryWithAuthor.toMap());
+    await batch.commit();
+
+    return WordEntry(
+      id: id,
+      word: entryWithAuthor.word,
+      type: entryWithAuthor.type,
+      meaning: entryWithAuthor.meaning,
+      sentence: entryWithAuthor.sentence,
+      pronunciation: entryWithAuthor.pronunciation,
+      synonyms: entryWithAuthor.synonyms,
+      antonyms: entryWithAuthor.antonyms,
+      addedBy: entryWithAuthor.addedBy,
+    );
+  }
+
+  Future<String> _uniqueId(String word, String type) async {
+    // Firestore IDs cannot contain '/', so clean the parts first.
+    String clean(String s) {
+      final out = s.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-');
+      return out.replaceAll(RegExp(r'^-+|-+$'), '');
+    }
+
+    final base = '${clean(word).isEmpty ? 'word' : clean(word)}-'
+        '${clean(type).isEmpty ? 'other' : clean(type)}';
+    var n = 1;
+    while ((await _words.doc('$base-$n').get()).exists) {
+      n++;
+    }
+    return '$base-$n';
+  }
+
+  /// IDs of the current user's favourite words.
+  Stream<Set<String>> watchFavouriteIds() {
+    final email = _auth.currentUser?.email;
+    if (email == null) return Stream.value(<String>{});
+    return _userDoc(email)
+        .collection('FavouriteWords')
+        .snapshots()
+        .map((s) => s.docs.map((d) => d.id).toSet());
+  }
+
+  Future<void> setFavourite(WordEntry entry, bool favourite) async {
+    final ref = _userDoc(_email).collection('FavouriteWords').doc(entry.id);
+    if (favourite) {
+      await ref.set(entry.toMap());
+    } else {
+      await ref.delete();
     }
   }
 
-  // Helper method to generate a unique document ID
-  Future<String> _generateUniqueDocumentId(String word, String type) async {
-    int suffix = 1;
-    String documentId = '$word-$type-$suffix';
-
-    // Loop to ensure the document ID is unique
-    while (await _documentExists(documentId)) {
-      suffix++;
-      documentId =
-          '$word-$type-$suffix'; // Update the document ID with a new suffix
-    }
-
-    return documentId;
-  }
-
-  // Method to check if a document with the given ID already exists
-  Future<bool> _documentExists(String documentId) async {
-    try {
-      // Check if a document with the specific ID exists
-      DocumentSnapshot document = await _wordsCollection.doc(documentId).get();
-      return document
-          .exists; // Return true if the document exists, otherwise false
-    } catch (e) {
-      throw Exception('Error checking document existence: $e');
-    }
-  }
-
-  // Method to check if a word with the same type already exists
-  Future<bool> checkIfWordExists(String word, String type) async {
-    try {
-      // Query Firestore to check for the existence of the word with the given type
-      QuerySnapshot querySnapshot = await _wordsCollection
-          .where('Word', isEqualTo: word)
-          .where('Type', isEqualTo: type)
-          .get();
-
-      return querySnapshot.docs
-          .isNotEmpty; // Return true if documents are found, otherwise false
-    } catch (e) {
-      throw Exception('Error checking word existence: $e');
-    }
-  }
-
-  // Method to fetch all words from the collection
-  Future<List<DocumentSnapshot>> fetchAllWords() async {
-    try {
-      // Retrieve all documents from the collection
-      QuerySnapshot querySnapshot = await _wordsCollection.get();
-      return querySnapshot.docs; // Return the list of document snapshots
-    } catch (e) {
-      throw Exception('Error fetching all words: $e');
-    }
+  Stream<int> watchAddedCount() {
+    final email = _auth.currentUser?.email;
+    if (email == null) return Stream.value(0);
+    return _userDoc(email).collection('AddedWords').snapshots().map((s) => s.size);
   }
 }
